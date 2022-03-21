@@ -1,6 +1,7 @@
 use std::{
     ffi::OsStr,
     io::Read,
+    net::TcpListener,
     process::{Child, Command, Stdio},
     thread,
     time::Duration,
@@ -78,7 +79,7 @@ impl LightningD {
         let mut cookie_value = String::new();
         cookie.read_to_string(&mut cookie_value)?;
         debug!("cookie file: ({})", cookie_value);
-        let values: Vec<&str> = cookie_value.split(":").collect();
+        let values: Vec<&str> = cookie_value.split(':').collect();
 
         let rpcuser = format!("--bitcoin-rpcuser={}", values[0]);
         let rpcpassword = format!("--bitcoin-rpcpassword={}", values[1]);
@@ -123,6 +124,15 @@ impl Drop for LightningD {
     }
 }
 
+/// Returns a non-used local port if available.
+///
+/// Note there is a race condition during the time the method check availability and the caller
+pub fn get_available_port() -> Result<u16, Error> {
+    // using 0 as port let the system assign a port available
+    let t = TcpListener::bind(("127.0.0.1", 0))?; // 0 means the OS choose a free port
+    Ok(t.local_addr().map(|s| s.port())?)
+}
+
 #[cfg(test)]
 mod tests {
     use bitcoind::bitcoincore_rpc::RpcApi;
@@ -135,13 +145,8 @@ mod tests {
     use crate::LightningD;
 
     #[test]
-    fn lightningd() {
-        let _ = env_logger::try_init();
-        let bitcoind_exe = exe_path().unwrap();
-        let bitcoind = BitcoinD::new(bitcoind_exe).unwrap();
-        let address = bitcoind.client.get_new_address(None, None).unwrap();
-        bitcoind.client.generate_to_address(100, &address).unwrap();
-
+    fn one_lightningd() {
+        let bitcoind = init();
         let mut conf = Conf::default();
         conf.view_stdout = log_enabled!(Level::Debug);
         let exe = std::env::var("LIGHTNINGD_EXE")
@@ -149,5 +154,28 @@ mod tests {
         let lightningd = LightningD::with_conf(exe, &bitcoind, &conf).unwrap();
         let getinfo = lightningd.client.getinfo().unwrap();
         assert_eq!(getinfo.blockheight, 100);
+    }
+
+    #[test]
+    fn two_lightningd() {
+        let bitcoind = init();
+
+        let exe = std::env::var("LIGHTNINGD_EXE")
+            .expect("LIGHTNINGD_EXE env var pointing to `lightningd` executable is required");
+
+        let mut conf = Conf::default();
+        conf.view_stdout = log_enabled!(Level::Debug);
+
+        let _lightningd_1 = LightningD::with_conf(&exe, &bitcoind, &conf).unwrap();
+        let _lightningd_2 = LightningD::with_conf(&exe, &bitcoind, &conf).unwrap();
+    }
+
+    fn init() -> BitcoinD {
+        let _ = env_logger::try_init();
+        let bitcoind_exe = exe_path().unwrap();
+        let bitcoind = BitcoinD::new(bitcoind_exe).unwrap();
+        let address = bitcoind.client.get_new_address(None, None).unwrap();
+        bitcoind.client.generate_to_address(100, &address).unwrap();
+        bitcoind
     }
 }
