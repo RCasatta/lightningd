@@ -2,6 +2,10 @@
 name = "lightningd"
 version = "0.1.0"
 edition = "2021"
+description = "Utility to run a regtest lightningd process, useful in integration testing environment."
+license = "MIT"
+repository = "https://github.com/RCasatta/lightningd"
+documentation = "https://docs.rs/lightningd/"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
