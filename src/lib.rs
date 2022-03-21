@@ -109,6 +109,17 @@ impl LightningD {
 
         let client = LightningRPC::new(&sock_path);
 
+        for _ in 0..60 {
+            if let Ok(getinfo) = client.getinfo() {
+                if getinfo.warning_bitcoind_sync.is_none()
+                    && getinfo.warning_lightningd_sync.is_none()
+                {
+                    break;
+                }
+            }
+            thread::sleep(Duration::from_millis(500));
+        }
+
         Ok(LightningD {
             process,
             client,
@@ -138,6 +149,7 @@ mod tests {
     use bitcoind::bitcoincore_rpc::RpcApi;
     use bitcoind::exe_path;
     use bitcoind::BitcoinD;
+    use log::debug;
     use log::log_enabled;
     use log::Level;
 
@@ -153,6 +165,7 @@ mod tests {
             .expect("LIGHTNINGD_EXE env var pointing to `lightningd` executable is required");
         let lightningd = LightningD::with_conf(exe, &bitcoind, &conf).unwrap();
         let getinfo = lightningd.client.getinfo().unwrap();
+        debug!("{:?}", getinfo);
         assert_eq!(getinfo.blockheight, 100);
     }
 
