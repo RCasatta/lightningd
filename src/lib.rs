@@ -1,7 +1,7 @@
 use std::{
     ffi::OsStr,
     io::Read,
-    net::TcpListener,
+    net::{Ipv4Addr, SocketAddrV4, TcpListener},
     process::{Child, Command, Stdio},
     thread,
     time::Duration,
@@ -9,8 +9,15 @@ use std::{
 
 use bitcoind::BitcoinD;
 use clightningrpc::LightningRPC;
+use conf::Conf;
+use error::Error;
 use log::debug;
 use tempfile::TempDir;
+
+use crate::conf::{IdHost, ListenAnnounce};
+
+mod conf;
+mod error;
 
 /// Struct representing the bitcoind process with related information
 pub struct LightningD {
@@ -21,29 +28,8 @@ pub struct LightningD {
     /// Work directory, where the node store blocks and other stuff. It is kept in the struct so that
     /// directory is deleted only when this struct is dropped
     _work_dir: TempDir,
-}
 
-#[derive(Debug)]
-pub enum Error {
-    /// Wrapper of io Error
-    Io(std::io::Error),
-}
-
-#[derive(Default)]
-pub struct Conf {
-    /// lightningd command line arguments containing no spaces like `vec!["--rgb=AABBCC", "-regtest"]`
-    /// note that `--lightning-dir=<dir>`, `--network+regtest`
-    /// cannot be used because they are automatically initialized.
-    pub args: Vec<String>,
-
-    /// if `true` bitcoind log output will not be suppressed
-    pub view_stdout: bool,
-}
-
-impl From<std::io::Error> for Error {
-    fn from(e: std::io::Error) -> Self {
-        Error::Io(e)
-    }
+    id_host: Option<IdHost>,
 }
 
 impl LightningD {
@@ -85,6 +71,24 @@ impl LightningD {
         let rpcpassword = format!("--bitcoin-rpcpassword={}", values[1]);
 
         let lightning_dir_arg = format!("--lightning-dir={}", temp_path.display());
+
+        let mut p2p_args = vec![];
+        let listen_on = match conf.p2p.listen_announce {
+            ListenAnnounce::No => None,
+            ListenAnnounce::Listen => {
+                let listen_on =
+                    SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), get_available_port()?);
+                p2p_args.push(format!("--bind-addr={}", listen_on));
+                Some(listen_on)
+            }
+            ListenAnnounce::ListenAndAnnounce => {
+                let listen_on =
+                    SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), get_available_port()?);
+                p2p_args.push(format!("--addr={}", listen_on));
+                Some(listen_on)
+            }
+        };
+
         let process = Command::new(exe.as_ref())
             .arg("--network=regtest")
             .arg(rpcconnect)
@@ -92,6 +96,7 @@ impl LightningD {
             .arg(rpcuser)
             .arg(rpcpassword)
             .arg(lightning_dir_arg)
+            .args(p2p_args)
             .stdout(stdout)
             .spawn()?;
 
@@ -99,9 +104,11 @@ impl LightningD {
         sock_path.push("regtest");
         sock_path.push("lightning-rpc");
 
-        for _ in 0..60 {
+        for i in 0.. {
             if sock_path.exists() {
                 break;
+            } else if i >= 60 {
+                return Err(Error::SockPathNotExist);
             } else {
                 thread::sleep(Duration::from_millis(500));
             }
@@ -109,22 +116,41 @@ impl LightningD {
 
         let client = LightningRPC::new(&sock_path);
 
-        for _ in 0..60 {
+        let mut i = 0;
+        let id = loop {
             if let Ok(getinfo) = client.getinfo() {
                 if getinfo.warning_bitcoind_sync.is_none()
                     && getinfo.warning_lightningd_sync.is_none()
                 {
-                    break;
+                    break getinfo.id;
                 }
             }
+            if i >= 60 {
+                return Err(Error::GetInfoSyncing);
+            }
+            i += 1;
             thread::sleep(Duration::from_millis(500));
+        };
+
+        if let Some(IdHost { id, host }) = conf.p2p.connect.as_ref() {
+            let connect_result = client.connect(id, host.map(|h| h.to_string()).as_deref())?;
+            debug!("connect_result: {:?}", connect_result);
         }
 
+        let id_host = listen_on.map(|host| IdHost {
+            id,
+            host: Some(host),
+        });
         Ok(LightningD {
             process,
             client,
+            id_host,
             _work_dir: temp_dir,
         })
+    }
+
+    pub fn id_host(&self) -> Option<&IdHost> {
+        self.id_host.as_ref()
     }
 }
 
@@ -153,6 +179,8 @@ mod tests {
     use log::log_enabled;
     use log::Level;
 
+    use crate::conf::ListenAnnounce;
+    use crate::conf::P2P;
     use crate::Conf;
     use crate::LightningD;
 
@@ -178,9 +206,22 @@ mod tests {
 
         let mut conf = Conf::default();
         conf.view_stdout = log_enabled!(Level::Debug);
+        conf.p2p = P2P {
+            connect: None,
+            listen_announce: ListenAnnounce::Listen,
+        };
 
-        let _lightningd_1 = LightningD::with_conf(&exe, &bitcoind, &conf).unwrap();
-        let _lightningd_2 = LightningD::with_conf(&exe, &bitcoind, &conf).unwrap();
+        let lightningd_1 = LightningD::with_conf(&exe, &bitcoind, &conf).unwrap();
+        assert!(lightningd_1.id_host().is_some());
+
+        conf.p2p = P2P {
+            connect: lightningd_1.id_host().cloned(),
+            listen_announce: ListenAnnounce::Listen,
+        };
+
+        let lightningd_2 = LightningD::with_conf(&exe, &bitcoind, &conf).unwrap();
+        let list_peers = lightningd_2.client.listpeers(None, None).unwrap();
+        assert_eq!(list_peers.peers.len(), 1);
     }
 
     fn init() -> BitcoinD {
