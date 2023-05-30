@@ -1,6 +1,10 @@
 name: Test
 
-on: [pull_request]
+on:
+  push:
+    branches:
+      - master
+  pull_request: {}
 
 env:
   CARGO_TERM_COLOR: always
@@ -15,37 +19,26 @@ jobs:
       fail-fast: false
 
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-      - run: curl -L https://bitcoincore.org/bin/bitcoin-core-22.0/bitcoin-22.0-x86_64-linux-gnu.tar.gz | tar -xvz 
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+      - run: curl -L https://bitcoincore.org/bin/bitcoin-core-22.0/bitcoin-22.0-x86_64-linux-gnu.tar.gz | tar -xvz
       - run: echo "$GITHUB_WORKSPACE/bitcoin-22.0/bin" >> $GITHUB_PATH
       - run: echo "BITCOIND_EXE=$GITHUB_WORKSPACE/bitcoin-22.0/bin/bitcoind" >> $GITHUB_ENV
       - run: curl -L https://github.com/ElementsProject/lightning/releases/download/v0.10.2/clightning-v0.10.2-Ubuntu-20.04.tar.xz | tar -xJ
       - run: echo "$GITHUB_WORKSPACE/usr/bin" >> $GITHUB_PATH
       - run: echo "LIGHTNINGD_EXE=$GITHUB_WORKSPACE/usr/bin/lightningd" >> $GITHUB_ENV
-
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
+      - run: cargo test
 
   cosmetics:
     runs-on: ubuntu-20.04
     steps:
-      - uses: actions/checkout@v2
-      - uses: Swatinem/rust-cache@v1.2.0
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v3
+      - uses: Swatinem/rust-cache@v2
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          override: true
-          profile: minimal
           components: rustfmt, clippy
-      - name: fmt
-        run: cargo fmt -- --check
-      - name: clippy
-        run: cargo clippy -- -D warnings
+      - run: cargo fmt -- --check
+      - run: cargo clippy -- -D warnings
 
   rust-version:
     runs-on: ubuntu-20.04
@@ -55,14 +48,11 @@ jobs:
         toolchain: [ "1.63.0", "stable", "nightly" ]
 
     steps:
-      - uses: actions/checkout@v2
-      - uses: Swatinem/rust-cache@v1.2.0
+      - uses: actions/checkout@v3
+      - uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ matrix.version }}
-      - uses: actions-rs/toolchain@v1
+          key: ${{ matrix.toolchain }}
+      - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.toolchain }}
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: build
+      - run: cargo build
