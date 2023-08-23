@@ -228,7 +228,11 @@ mod tests {
         let _ = env_logger::try_init();
         let bitcoind_exe = exe_path().unwrap();
         let bitcoind = BitcoinD::new(bitcoind_exe).unwrap();
-        let address = bitcoind.client.get_new_address(None, None).unwrap();
+        let address = bitcoind
+            .client
+            .get_new_address(None, None)
+            .unwrap()
+            .assume_checked();
         bitcoind.client.generate_to_address(100, &address).unwrap();
         bitcoind
     }
