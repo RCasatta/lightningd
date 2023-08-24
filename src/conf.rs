@@ -28,15 +28,10 @@ pub struct IdHost {
     pub host: Option<SocketAddrV4>,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
 pub enum ListenAnnounce {
+    #[default]
     No, // default
     Listen,
     ListenAndAnnounce,
-}
-
-impl Default for ListenAnnounce {
-    fn default() -> Self {
-        ListenAnnounce::No
-    }
 }
