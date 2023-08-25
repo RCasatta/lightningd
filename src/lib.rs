@@ -1,6 +1,5 @@
 use std::{
     ffi::OsStr,
-    io::Read,
     net::{Ipv4Addr, SocketAddrV4, TcpListener},
     process::{Child, Command, Stdio},
     thread,
@@ -61,14 +60,19 @@ impl LightningD {
         let rpcconnect = format!("--bitcoin-rpcconnect={}", bitcoind.params.rpc_socket.ip());
         let rpcport = format!("--bitcoin-rpcport={}", bitcoind.params.rpc_socket.port());
 
-        let mut cookie = std::fs::File::open(&bitcoind.params.cookie_file)?;
-        let mut cookie_value = String::new();
-        cookie.read_to_string(&mut cookie_value)?;
-        debug!("cookie file: ({})", cookie_value);
-        let values: Vec<&str> = cookie_value.split(':').collect();
+        let (user, pass) = bitcoind
+            .params
+            .get_cookie_values()
+            .expect("failing get_cookie_values");
 
-        let rpcuser = format!("--bitcoin-rpcuser={}", values[0]);
-        let rpcpassword = format!("--bitcoin-rpcpassword={}", values[1]);
+        let rpcuser = format!(
+            "--bitcoin-rpcuser={}",
+            user.expect("missing user in cookie file")
+        );
+        let rpcpassword = format!(
+            "--bitcoin-rpcpassword={}",
+            pass.expect("missing password in cookie file")
+        );
 
         let lightning_dir_arg = format!("--lightning-dir={}", temp_path.display());
 
