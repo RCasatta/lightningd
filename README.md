@@ -15,5 +15,5 @@ let lightningd = lightningd::LightningD::new(lightningd_exe, bitcoind).unwrap();
 Run test example:
 
 ```bash
-RUST_LOG=debug LIGHTNINGD_EXE=/usr/local/bin/lightningd cargo test --features bitcoind_22_0 -- --nocapture
+RUST_LOG=debug LIGHTNINGD_EXE=/usr/local/bin/lightningd cargo test --features bitcoind_25_1 -- --nocapture
 ```

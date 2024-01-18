@@ -12,13 +12,14 @@ documentation = "https://docs.rs/lightningd/"
 [dependencies]
 clightningrpc = "0.3.0-beta.7"
 tempfile = "3.3.0"
-bitcoind = "0.32.0"
+bitcoind = "0.34.1"
 log = "0.4"
 
 [dev-dependencies]
 env_logger = "0.9"
 
 [features]
+bitcoind_25_1 = ["bitcoind/25_1"]
 bitcoind_25_0 = ["bitcoind/25_0"]
 bitcoind_24_0_1 = ["bitcoind/24_0_1"]
 bitcoind_23_1 = ["bitcoind/23_1"]
