@@ -62,9 +62,8 @@ impl LightningD {
 
         let cookie = bitcoind
             .params
-            .get_cookie_values()
-            .expect("failing get_cookie_values")
-            .expect("missing cookie file");
+            .get_cookie_values()?
+            .ok_or(Error::MissingAuth)?;
 
         let rpcuser = format!("--bitcoin-rpcuser={}", cookie.user);
         let rpcpassword = format!("--bitcoin-rpcpassword={}", cookie.password);

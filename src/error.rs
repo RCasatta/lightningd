@@ -9,6 +9,8 @@ pub enum Error {
     SockPathNotExist,
 
     GetInfoSyncing,
+
+    MissingAuth,
 }
 
 impl From<std::io::Error> for Error {
