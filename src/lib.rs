@@ -8,8 +8,8 @@ use std::{
 
 use bitcoind::BitcoinD;
 use clightningrpc::LightningRPC;
-use conf::Conf;
-use error::Error;
+pub use conf::Conf;
+pub use error::Error;
 use log::debug;
 use tempfile::TempDir;
 
